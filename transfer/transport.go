@@ -131,8 +131,9 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	case util.ErrInvalidAmountPrecision,
 		util.ErrNegativeAmount,
 		wallet.ErrEmptyAccountID,
+		wallet.ErrEmptyPaymentID,
 		wallet.ErrInvalidCurrency,
-		ErrInsufficientBalance,
+		wallet.ErrInsufficientBalance,
 		ErrDifferentCurrency:
 		w.WriteHeader(http.StatusBadRequest)
 	default:

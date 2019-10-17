@@ -4,7 +4,6 @@ package wallet
 import (
 	"context"
 	"errors"
-	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -22,8 +21,9 @@ const (
 	GBP string = "GBP"
 )
 
-func isValidCurrency(string string) bool {
-	switch string {
+// IsValidCurrency returns true if the currency code is valid
+func IsValidCurrency(currency string) bool {
+	switch currency {
 	case USD, EUR, SGD, GBP:
 		return true
 	}
@@ -33,15 +33,23 @@ func isValidCurrency(string string) bool {
 var (
 	// ErrEmptyAccountID is returned when creating an account without an ID
 	ErrEmptyAccountID = errors.New("Account ID must not be empty")
+	// ErrEmptyPaymentID is returned when creating an account without an ID
+	ErrEmptyPaymentID = errors.New("Payment ID must not be empty")
 	// ErrInvalidCurrency is returned for unrecognized currency codes
 	ErrInvalidCurrency = errors.New("Invalid currency code")
+	// ErrInsufficientBalance is returned if an account's balance is less than
+	// an amount requested to be transferred
+	ErrInsufficientBalance = errors.New("Account has an insufficient balance")
+	// ErrInvalidAmount is returned if the amount requested to transfer
+	// is not greater than 0
+	ErrInvalidAmount = errors.New("Transfer amount must be positive")
 )
 
 // Account represents a user account in the wallet system
 type Account struct {
-	ID       string
-	Balance  decimal.Decimal
-	Currency string
+	ID       string          `db:"id"`
+	Balance  decimal.Decimal `db:"balance"`
+	Currency string          `db:"currency"`
 }
 
 // NewAccount creates an account
@@ -50,7 +58,7 @@ func NewAccount(id, balance, currency string) (*Account, error) {
 		return nil, ErrEmptyAccountID
 	}
 
-	if !isValidCurrency(currency) {
+	if !IsValidCurrency(currency) {
 		return nil, ErrInvalidCurrency
 	}
 
@@ -66,6 +74,27 @@ func NewAccount(id, balance, currency string) (*Account, error) {
 	}, nil
 }
 
+// TransferIn adds to the account's balance
+func (a *Account) TransferIn(amount decimal.Decimal) error {
+	if !amount.IsPositive() {
+		return ErrInvalidAmount
+	}
+	a.Balance = a.Balance.Add(amount)
+	return nil
+}
+
+// TransferOut removes from the account's balance
+func (a *Account) TransferOut(amount decimal.Decimal) error {
+	if !amount.IsPositive() {
+		return ErrInvalidAmount
+	}
+	if amount.GreaterThan(a.Balance) {
+		return ErrInsufficientBalance
+	}
+	a.Balance = a.Balance.Sub(amount)
+	return nil
+}
+
 // AccountRepository is the storage interface for accounts
 type AccountRepository interface {
 	Store(ctx context.Context, account *Account) error
@@ -73,32 +102,21 @@ type AccountRepository interface {
 	All(ctx context.Context) ([]Account, error)
 }
 
-// type Direction string
-
-// const (
-// 	Incoming Direction = "incoming"
-// 	Outgoing Direction = "outgoing"
-// )
-
 // Payment represent a transfer from one account to another.
-// A payment can either be "incoming" or "outgoing".
-// When a user makes a payment action, two Payment entries are created:
-// one "incoming" and one "outgoing".
 type Payment struct {
-	To     string
-	From   string
-	Amount decimal.Decimal
-	// Direction Direction
-	Timestamp time.Time
+	ID     string          `db:"id"`
+	To     string          `db:"to_account_id"`
+	From   string          `db:"from_account_id"`
+	Amount decimal.Decimal `db:"amount"`
 }
 
 // NewPayment creates a Payment
 func NewPayment(to, from *Account, amount decimal.Decimal) *Payment {
 	return &Payment{
-		To:        to.ID,
-		From:      from.ID,
-		Amount:    amount,
-		Timestamp: time.Now().UTC(), // TODO -- get it from postgres?
+		ID:     "foo", // TODO -- use uuid
+		To:     to.ID,
+		From:   from.ID,
+		Amount: amount,
 	}
 }
 
@@ -106,9 +124,9 @@ func NewPayment(to, from *Account, amount decimal.Decimal) *Payment {
 type PaymentRepository interface {
 	Store(ctx context.Context, payment *Payment) error
 	All(ctx context.Context) ([]Payment, error)
-	Balance(ctx context.Context, accountID string) (decimal.Decimal, error)
 }
 
+// TODO -- move back to Transfer?
 // Service defines the payment transfer service
 type Service interface {
 	// Transfer transfers an amount of money from one account to another

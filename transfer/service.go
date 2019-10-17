@@ -11,15 +11,9 @@ import (
 )
 
 var (
-	// ErrInvalidAmount is returned if the amount requested to transfer
-	// is not greater than 0
-	ErrInvalidAmount = errors.New("Transfer amount must be positive")
 	// ErrDifferentCurrency is returned if a transfer is requested between accounts
 	// that have different currencies
 	ErrDifferentCurrency = errors.New("Transfers must use the same currency")
-	// ErrInsufficientBalance is returned if an account's balance is less than
-	// an amount requested to be transferred
-	ErrInsufficientBalance = errors.New("Account has an insufficient balance")
 )
 
 type service struct {
@@ -42,7 +36,7 @@ func (s service) Transfer(ctx context.Context, to, from string, amount decimal.D
 	// TODO -- error checking in the PaymentRepository level?
 	// The amount must be > 0
 	if !amount.IsPositive() {
-		return nil, ErrInvalidAmount
+		return nil, wallet.ErrInvalidAmount
 	}
 
 	// Check that the accounts exist
@@ -56,16 +50,6 @@ func (s service) Transfer(ctx context.Context, to, from string, amount decimal.D
 		return nil, err
 	}
 
-	// Check that the account has enough money to send
-	fromBalance, err := s.payments.Balance(ctx, from)
-	if err != nil {
-		return nil, err
-	}
-
-	if fromBalance.LessThan(amount) {
-		return nil, ErrInsufficientBalance
-	}
-
 	// Transfers between accounts of different currencies is not allowed
 	if toAccount.Currency != fromAccount.Currency {
 		return nil, ErrDifferentCurrency
@@ -74,6 +58,14 @@ func (s service) Transfer(ctx context.Context, to, from string, amount decimal.D
 	p := wallet.NewPayment(toAccount, fromAccount, amount)
 
 	if err := s.payments.Store(ctx, p); err != nil {
+		return nil, err
+	}
+
+	if err := s.accounts.Store(ctx, fromAccount); err != nil {
+		return nil, err
+	}
+
+	if err := s.accounts.Store(ctx, toAccount); err != nil {
 		return nil, err
 	}
 

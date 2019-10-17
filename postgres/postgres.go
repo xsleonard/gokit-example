@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/jmoiron/sqlx"
-	"github.com/shopspring/decimal"
 
 	wallet "github.com/xsleonard/gokit-example"
 )
@@ -26,30 +25,54 @@ func NewAccountRepository(db *sqlx.DB, logger log.Logger) wallet.AccountReposito
 }
 
 func (r *accountRepository) Store(ctx context.Context, account *wallet.Account) error {
+	if account.ID == "" {
+		return wallet.ErrEmptyAccountID
+	}
+	if !wallet.IsValidCurrency(account.Currency) {
+		return wallet.ErrInvalidCurrency
+	}
+
 	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		q := `insert into account (id, currency, balance) values (?, ?, ?)`
-		// TODO -- let postgres assign the ID?
-		_, err := tx.ExecContext(ctx, q, account.ID, account.Currency, account.Balance.StringFixed(2))
+		q := `insert into account (id, currency) values (?, ?)`
+		_, err := tx.ExecContext(ctx, q, account.ID, account.Currency)
 		return err
 	})
 }
 
 func (r *accountRepository) Get(ctx context.Context, id string) (*wallet.Account, error) {
-	var balance string
-	var currency string
+	var a wallet.Account
 	if err := insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		row := tx.QueryRowContext(ctx, `select balance, currency from account where id=$1`, id)
-		return row.Scan(&balance, &currency)
+		row := tx.QueryRowxContext(ctx, `select balance, currency from account_balance where id=$1`, id)
+		return row.StructScan(&a)
 	}); err != nil {
 		return nil, err
 	}
 
-	return wallet.NewAccount(id, balance, currency)
+	return &a, nil
 }
 
 func (r *accountRepository) All(ctx context.Context) ([]wallet.Account, error) {
-	// TODO
-	return nil, nil
+	var rows *sqlx.Rows
+	if err := insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		var err error
+		rows, err = tx.QueryxContext(ctx, `select id, balance, currency from account_balance`)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	// TODO -- are rows valid outside of the tx?
+	var accounts []wallet.Account
+	defer rows.Close()
+	for rows.Next() {
+		var a wallet.Account
+		if err := rows.StructScan(&a); err != nil {
+			return nil, err
+		}
+		accounts = append(accounts, a)
+	}
+
+	return accounts, nil
 }
 
 type paymentRepository struct {
@@ -66,15 +89,39 @@ func NewPaymentRepository(db *sqlx.DB, logger log.Logger) wallet.PaymentReposito
 }
 
 func (r *paymentRepository) Store(ctx context.Context, payment *wallet.Payment) error {
-	return nil
+	if payment.ID == "" {
+		return wallet.ErrEmptyPaymentID
+	}
+
+	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		q := `insert into payment (id, from_account_id, to_account_id, amount) values (?, ?, ?)`
+		_, err := tx.ExecContext(ctx, q, payment.ID, payment.From, payment.To, payment.Amount)
+		return err
+	})
 }
 
 func (r *paymentRepository) All(ctx context.Context) ([]wallet.Payment, error) {
-	return nil, nil
-}
+	var rows *sqlx.Rows
+	if err := insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		var err error
+		rows, err = tx.QueryxContext(ctx, `select id, from_account_id, to_account_id, amount, created_at from payment`)
+		return err
+	}); err != nil {
+		return nil, err
+	}
 
-func (r *paymentRepository) Balance(ctx context.Context, accountID string) (decimal.Decimal, error) {
-	return decimal.New(0, 0), nil
+	// TODO -- are rows valid outside of the tx?
+	var payments []wallet.Payment
+	defer rows.Close()
+	for rows.Next() {
+		var p wallet.Payment
+		if err := rows.StructScan(&p); err != nil {
+			return nil, err
+		}
+		payments = append(payments, p)
+	}
+
+	return payments, nil
 }
 
 func insideTx(ctx context.Context, logger log.Logger, db *sqlx.DB, f func(ctx context.Context, tx *sqlx.Tx) error) error {

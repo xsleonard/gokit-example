@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/xsleonard/gokit-example/postgres"
 	"github.com/xsleonard/gokit-example/transfer"
+
+	_ "github.com/lib/pq" // load postgres driver
 )
 
 const (
@@ -29,9 +32,12 @@ const (
 
 func main() {
 	// TODO -- use viper to parse flags?
-	// Flags needed:
-	// 	Postgres DB URL, name, username, password
-	// 	Public hosting URL
+	// TODO -- use env vars as fallback
+	var httpAddr string
+	var databaseURL string
+	flag.StringVar(&httpAddr, "addr", "localhost:8888", "HTTP listen address")
+	flag.StringVar(&databaseURL, "db", "postgresql://postgres@localhost:54320/wallet?sslmode=disable", "Postgres DB URL")
+	flag.Parse()
 
 	ctx := context.Background()
 
@@ -39,12 +45,12 @@ func main() {
 	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 
-	databaseURL := "" // TODO load from config
 	db, err := sqlx.ConnectContext(ctx, "postgres", databaseURL)
 	if err != nil {
 		log.With(logger, "err", err).Log("Unable to connect to DB")
 		os.Exit(1)
 	}
+	defer db.Close()
 
 	accountStorage := postgres.NewAccountRepository(db, log.With(logger, "pkg", "postgres"))
 	paymentStorage := postgres.NewPaymentRepository(db, log.With(logger, "pkg", "postgres"))
@@ -55,7 +61,6 @@ func main() {
 
 	handler := transfer.MakeHandler(service, log.With(transferLogger, "transport", "http"))
 
-	httpAddr := "" // TODO load from config
 	httpServer := &http.Server{
 		Addr:         httpAddr,
 		Handler:      handler,

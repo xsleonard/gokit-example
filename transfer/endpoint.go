@@ -2,7 +2,6 @@ package transfer
 
 import (
 	"context"
-	"time"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/shopspring/decimal"
@@ -12,18 +11,16 @@ import (
 
 // Payment is a JSON-representable form of wallet.Payment
 type Payment struct {
-	To        string    `json:"to"`
-	From      string    `json:"from"`
-	Amount    string    `json:"amount"`
-	Timestamp time.Time `json:"timestamp"`
+	To     string `json:"to"`
+	From   string `json:"from"`
+	Amount string `json:"amount"`
 }
 
 func newPayment(p wallet.Payment) Payment {
 	return Payment{
-		To:        p.To,
-		From:      p.From,
-		Amount:    p.Amount.StringFixed(2),
-		Timestamp: p.Timestamp,
+		To:     p.To,
+		From:   p.From,
+		Amount: p.Amount.StringFixed(2),
 	}
 }
 
