@@ -67,14 +67,6 @@ func newWalletAccount(a account) wallet.Account {
 	}
 }
 
-func newWalletAccounts(accounts []account) []wallet.Account {
-	aa := make([]wallet.Account, len(accounts))
-	for i, a := range accounts {
-		aa[i] = newWalletAccount(a)
-	}
-	return aa
-}
-
 func (r *accountRepository) GetTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*wallet.Account, error) {
 	row := tx.QueryRowxContext(ctx, `select id, balance, currency from account_balance where id=$1`, id)
 

@@ -30,7 +30,7 @@ func (s loggingService) Transfer(ctx context.Context, to, from uuid.UUID, amount
 		if err != nil {
 			logger = log.With(logger, "err", err)
 		}
-		s.logger.Log("operation", "transfer", "to", to, "from", from, "amount", amount, "took", time.Since(begin))
+		logger.Log("operation", "transfer", "to", to, "from", from, "amount", amount, "took", time.Since(begin))
 	}(time.Now())
 
 	return s.Service.Transfer(ctx, to, from, amount)
@@ -42,7 +42,7 @@ func (s loggingService) Payments(ctx context.Context) (p []wallet.Payment, err e
 		if err != nil {
 			logger = log.With(logger, "err", err)
 		}
-		s.logger.Log("operation", "payments", "took", time.Since(begin))
+		logger.Log("operation", "payments", "took", time.Since(begin))
 	}(time.Now())
 
 	return s.Service.Payments(ctx)
@@ -54,7 +54,7 @@ func (s loggingService) Accounts(ctx context.Context) (a []wallet.Account, err e
 		if err != nil {
 			logger = log.With(logger, "err", err)
 		}
-		s.logger.Log("operation", "accounts", "took", time.Since(begin))
+		logger.Log("operation", "accounts", "took", time.Since(begin))
 	}(time.Now())
 
 	return s.Service.Accounts(ctx)

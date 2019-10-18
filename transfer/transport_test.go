@@ -375,6 +375,7 @@ func TestEndpoints(t *testing.T) {
 			handler.ServeHTTP(w, req)
 
 			resp := w.Result()
+			defer resp.Body.Close()
 
 			body, err := ioutil.ReadAll(resp.Body)
 			require.NoError(t, err)

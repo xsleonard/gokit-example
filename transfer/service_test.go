@@ -13,7 +13,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	wallet "github.com/xsleonard/gokit-example"
@@ -23,13 +22,9 @@ import (
 	_ "github.com/lib/pq" // load postgres driver
 )
 
-func main() {
-}
-
 var (
-	databaseName     = "wallet_test"
-	adminDatabaseURL = "postgresql://postgres@localhost:54320/?sslmode=disable"
-	databaseURL      = fmt.Sprintf("postgresql://postgres@localhost:54320/%s?sslmode=disable", databaseName)
+	databaseName = "wallet_test"
+	databaseURL  = fmt.Sprintf("postgresql://postgres@localhost:54320/%s?sslmode=disable", databaseName)
 )
 
 // setupDB sets up a clean test database and returns a teardown function
@@ -56,15 +51,6 @@ func setupDB(t *testing.T) (*sqlx.DB, func()) {
 		require.NoError(t, err)
 	}
 }
-
-var (
-	matchCtx = mock.MatchedBy(func(ctx context.Context) bool {
-		return true
-	})
-	matchTx = mock.MatchedBy(func(tx *sqlx.Tx) bool {
-		return true
-	})
-)
 
 func TestServiceTransfer(t *testing.T) {
 	toID := uuid.Must(uuid.NewV4())

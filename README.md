@@ -23,22 +23,8 @@ You can use docker-compose:
 docker-compose up -d
 ```
 
-Otherwise, install and run postgres as you wish, and create a database.
+Otherwise, install and run postgres as you wish.
 The default database name is `wallet`.
-
-### Install golang-migrate
-
-[migrate](https://github.com/golang-migrate/migrate) is used to manage DB migrations and setup the initial tables.
-
-Follow the installation instructions from https://github.com/golang-migrate/migrate/tree/master/cmd/migrate to install.
-
-### Install mockery
-
-Mockery is used to generate mocks for testing. This is only needed if developing this software. You can skip it if you are only running the software.
-
-```sh
-go get github.com/vektra/mockery/.../
-```
 
 ### Setup database
 
@@ -57,6 +43,12 @@ Run the migration tool to initialize the [database schema](./migrations/1_init.u
 ```sh
 make update-db
 ```
+
+### Install golang-migrate
+
+[migrate](https://github.com/golang-migrate/migrate) is used to manage DB migrations and setup the initial tables.
+
+Follow the installation instructions from https://github.com/golang-migrate/migrate/tree/master/cmd/migrate to install.
 
 ## Running
 
@@ -113,6 +105,14 @@ curl 'http://localhost:8888/v1/payments'
 ## Development
 
 ### Running tests
+
+Create the test database (if using docker-compose):
+
+```sh
+docker exec -it wallet_postgres psql -U postgres -c "create database wallet_test"
+```
+
+Run the tests:
 
 ```sh
 make test

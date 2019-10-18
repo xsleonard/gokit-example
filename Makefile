@@ -24,26 +24,9 @@ test-race: ## Run tests with -race
 	go test ./... -timeout=1m -race ${PARALLEL}
 
 lint: ## Run linters. Use make install-linters first.
-	gometalinter --deadline=3m -j 2 --disable-all --tests --vendor \
-		-E deadcode \
-		-E errcheck \
-		-E gas \
-		-E goconst \
-		-E gofmt \
-		-E goimports \
-		-E golint \
-		-E ineffassign \
-		-E interfacer \
-		-E maligned \
-		-E megacheck \
-		-E misspell \
-		-E nakedret \
-		-E structcheck \
-		-E unconvert \
-		-E unparam \
-		-E varcheck \
-		-E vet \
-		./...
+	golangci-lint run -c .golangci.yml ./...
+	@# The govet version in golangci-lint is out of date and has spurious warnings, run it separately
+	go vet -all ./...
 
 check: lint test ## Run tests and linters
 
@@ -52,17 +35,14 @@ cover: ## Runs tests on ./src/ with HTML code coverage
 	go tool cover -html=cover.out
 
 install-linters: ## Install linters
-	go get -u github.com/alecthomas/gometalinter
-	gometalinter --vendored-linters --install
+	# For some reason this install method is not recommended, see https://github.com/golangci/golangci-lint#install
+	# However, they suggest `curl ... | bash` which we should not do
+	go get -u github.com/golangci/golangci-lint/cmd/golangci-lint
 
 format: ## Formats the code. Must have goimports installed (use make install-linters).
 	goimports -w -local github.com/xsleonard/gokit-example ./...
 	# This performs code simplifications
 	gofmt -s -w ./...
-
-generate-mocks: ## Generates mocks with mockery. See the README for install instructions.
-	mockery -name=AccountRepository -case=underscore
-	mockery -name=PaymentRepository -case=underscore
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
