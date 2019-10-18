@@ -2,14 +2,18 @@
 
 This is a demo service for accounts with balances and transfers between those accounts.
 
+An account has an ID, balance and currency type. 
+Accounts with the same currency type can transfer amounts between each other, but the account
+balance can not go negative. 
+All amounts have at most 2 decimals of precision (e.g. "1.23"), regardless of the currency.
+
 <!-- MarkdownTOC levels="1,2" -->
 
 - [Setup](#setup)
 - [Running](#running)
 - [API Docs](#api-docs)
 - [Usage](#usage)
-- [Install linters if you don't have them](#install-linters-if-you-dont-have-them)
-- [Run the linters \(uses golangci-lint\)](#run-the-linters-uses-golangci-lint)
+- [Development](#development)
 
 <!-- /MarkdownTOC -->
 
@@ -73,17 +77,28 @@ go run ./cmd/testdata
 
 This adds 6 accounts and credits each account with 100 units of their currency.
 
+### Server configuration
+
+By default, the server will connect to the postgres database that is run by docker-compose and a database named `wallet`,
+and listens on `localhost:8888`.
+
+```sh
+go run ./cmd/wallet -h
+```
+
+```
+Usage of wallet:
+  -addr string
+        HTTP listen address (default "localhost:8888")
+  -db string
+        Postgres DB URL (default "postgresql://postgres@localhost:54320/wallet?sslmode=disable")
+```
+
 ### Run the server
 
 ```sh
 go run ./cmd/wallet
 ```
-
-### Server configuration
-
-```sh
-go run ./cmd/wallet -h
-
 
 ### List accounts
 
