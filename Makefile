@@ -6,11 +6,16 @@ PACKAGES = $(shell find ./src -type d -not -path '\./src')
 COMMIT=$$(git rev-parse HEAD)
 GOLDFLAGS="-X main.gitCommit=$(COMMIT)"
 
+DATABASE_URL ?= "postgresql://postgres@localhost:54320/wallet?sslmode=disable"
+
 run: ## Run the wallet service. To add arguments, do `make ARGS="--foo" run`.
 	go run -ldflags $(GOLDFLAGS) cmd/wallet/wallet.go ${ARGS}
 
 build: ## Build wallet binary
 	go build -ldflags $(GOLDFLAGS) cmd/wallet/wallet.go
+
+update-db: ## Updates the database to the latest schema. To change the database URL, do `make DATABASE_URL="..." update-db`.
+	migrate -database $(DATABASE_URL) -path ./migrations up
 
 test: ## Run tests
 	go test ./... -timeout=1m -cover ${PARALLEL}

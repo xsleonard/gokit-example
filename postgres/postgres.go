@@ -7,9 +7,12 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/jmoiron/sqlx"
+	uuid "github.com/satori/go.uuid"
 
 	wallet "github.com/xsleonard/gokit-example"
 )
+
+var nullUUID uuid.UUID
 
 type accountRepository struct {
 	db     *sqlx.DB
@@ -25,7 +28,7 @@ func NewAccountRepository(db *sqlx.DB, logger log.Logger) wallet.AccountReposito
 }
 
 func (r *accountRepository) Store(ctx context.Context, account *wallet.Account) error {
-	if account.ID == "" {
+	if uuid.Equal(account.ID, nullUUID) {
 		return wallet.ErrEmptyAccountID
 	}
 	if !wallet.IsValidCurrency(account.Currency) {
@@ -33,18 +36,17 @@ func (r *accountRepository) Store(ctx context.Context, account *wallet.Account) 
 	}
 
 	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		q := `insert into account (id, currency) values (?, ?)`
+		q := `insert into account (id, currency) values ($1, $2)`
 		_, err := tx.ExecContext(ctx, q, account.ID, account.Currency)
 		return err
 	})
 }
 
 func (r *accountRepository) Get(ctx context.Context, id string) (*wallet.Account, error) {
+	row := r.db.QueryRowxContext(ctx, `select balance, currency from account_balance where id=$1`, id)
+
 	var a wallet.Account
-	if err := insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		row := tx.QueryRowxContext(ctx, `select balance, currency from account_balance where id=$1`, id)
-		return row.StructScan(&a)
-	}); err != nil {
+	if err := row.StructScan(&a); err != nil {
 		return nil, err
 	}
 
@@ -52,16 +54,11 @@ func (r *accountRepository) Get(ctx context.Context, id string) (*wallet.Account
 }
 
 func (r *accountRepository) All(ctx context.Context) ([]wallet.Account, error) {
-	var rows *sqlx.Rows
-	if err := insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		var err error
-		rows, err = tx.QueryxContext(ctx, `select id, balance, currency from account_balance`)
-		return err
-	}); err != nil {
+	rows, err := r.db.QueryxContext(ctx, `select id, balance, currency from account_balance`)
+	if err != nil {
 		return nil, err
 	}
 
-	// TODO -- are rows valid outside of the tx?
 	var accounts []wallet.Account
 	defer rows.Close()
 	for rows.Next() {
@@ -89,28 +86,23 @@ func NewPaymentRepository(db *sqlx.DB, logger log.Logger) wallet.PaymentReposito
 }
 
 func (r *paymentRepository) Store(ctx context.Context, payment *wallet.Payment) error {
-	if payment.ID == "" {
+	if payment.ID == uuid.Nil {
 		return wallet.ErrEmptyPaymentID
 	}
 
 	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		q := `insert into payment (id, from_account_id, to_account_id, amount) values (?, ?, ?)`
-		_, err := tx.ExecContext(ctx, q, payment.ID, payment.From, payment.To, payment.Amount)
+		q := `insert into payment (id, from_account_id, to_account_id, amount) values ($1, $2, $3, $4)`
+		_, err := tx.ExecContext(ctx, q, payment.ID, payment.From.UUID, payment.To, payment.Amount)
 		return err
 	})
 }
 
 func (r *paymentRepository) All(ctx context.Context) ([]wallet.Payment, error) {
-	var rows *sqlx.Rows
-	if err := insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		var err error
-		rows, err = tx.QueryxContext(ctx, `select id, from_account_id, to_account_id, amount, created_at from payment`)
-		return err
-	}); err != nil {
+	rows, err := r.db.QueryxContext(ctx, `select id, from_account_id, to_account_id, amount from payment`)
+	if err != nil {
 		return nil, err
 	}
 
-	// TODO -- are rows valid outside of the tx?
 	var payments []wallet.Payment
 	defer rows.Close()
 	for rows.Next() {
@@ -124,7 +116,7 @@ func (r *paymentRepository) All(ctx context.Context) ([]wallet.Payment, error) {
 	return payments, nil
 }
 
-func insideTx(ctx context.Context, logger log.Logger, db *sqlx.DB, f func(ctx context.Context, tx *sqlx.Tx) error) error {
+func insideTx(ctx context.Context, logger log.Logger, db *sqlx.DB, f func(ctx context.Context, tx *sqlx.Tx) error) (err error) {
 	tx, err := db.BeginTxx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelDefault,
 		ReadOnly:  false,
@@ -132,15 +124,25 @@ func insideTx(ctx context.Context, logger log.Logger, db *sqlx.DB, f func(ctx co
 	if err != nil {
 		return err
 	}
+
 	defer func() {
-		if err := tx.Rollback(); err != nil {
-			log.With(logger, "err", err).Log("Postgres tx rollback failed")
+		if r := recover(); r != nil {
+			// Rollback on panic
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.With(logger, "err", rollbackErr).Log("msg", "Postgres tx rollback failed")
+			}
+			panic(r)
+		} else if err != nil {
+			// Rollback if the function failed
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				log.With(logger, "err", rollbackErr).Log("msg", "Postgres tx rollback failed")
+			}
+			logger.Log("err", err)
+		} else {
+			// Commit, and return any error from that
+			err = tx.Commit()
 		}
 	}()
 
-	if err := f(ctx, tx); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return f(ctx, tx)
 }

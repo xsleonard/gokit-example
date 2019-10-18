@@ -28,6 +28,8 @@ const (
 	serverReadTimeout  = time.Second * 10
 	serverWriteTimeout = time.Second * 60
 	serverIdleTimeout  = time.Second * 120
+
+	defaultDatabaseURL = "postgresql://postgres@localhost:54320/wallet?sslmode=disable"
 )
 
 func main() {
@@ -36,15 +38,17 @@ func main() {
 	var httpAddr string
 	var databaseURL string
 	flag.StringVar(&httpAddr, "addr", "localhost:8888", "HTTP listen address")
-	flag.StringVar(&databaseURL, "db", "postgresql://postgres@localhost:54320/wallet?sslmode=disable", "Postgres DB URL")
+	flag.StringVar(&databaseURL, "db", defaultDatabaseURL, "Postgres DB URL")
 	flag.Parse()
 
 	ctx := context.Background()
 
+	// Setup logger
 	var logger log.Logger
 	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 
+	// Setup DB
 	db, err := sqlx.ConnectContext(ctx, "postgres", databaseURL)
 	if err != nil {
 		log.With(logger, "err", err).Log("Unable to connect to DB")
@@ -59,6 +63,7 @@ func main() {
 	service := transfer.NewService(accountStorage, paymentStorage)
 	service = transfer.NewLoggingService(transferLogger, service)
 
+	// Setup HTTP server
 	handler := transfer.MakeHandler(service, log.With(transferLogger, "transport", "http"))
 
 	httpServer := &http.Server{

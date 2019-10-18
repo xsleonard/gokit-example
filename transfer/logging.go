@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/go-kit/kit/log"
-	"github.com/shopspring/decimal"
 
 	wallet "github.com/xsleonard/gokit-example"
 )
@@ -23,7 +23,7 @@ func NewLoggingService(logger log.Logger, s wallet.Service) wallet.Service {
 	}
 }
 
-func (s loggingService) Transfer(ctx context.Context, to, from string, amount decimal.Decimal) (p *wallet.Payment, err error) {
+func (s loggingService) Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (p *wallet.Payment, err error) {
 	defer func(begin time.Time) {
 		logger := s.logger
 		if err != nil {

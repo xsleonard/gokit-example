@@ -5,7 +5,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/apd"
+	uuid "github.com/satori/go.uuid"
 
 	wallet "github.com/xsleonard/gokit-example"
 )
@@ -14,6 +15,8 @@ var (
 	// ErrDifferentCurrency is returned if a transfer is requested between accounts
 	// that have different currencies
 	ErrDifferentCurrency = errors.New("Transfers must use the same currency")
+	// ErrSameAccount is returned if a transfer's sender and receiver are the same account
+	ErrSameAccount = errors.New("Transfers must be between different accounts")
 )
 
 type service struct {
@@ -29,16 +32,21 @@ func NewService(accounts wallet.AccountRepository, payments wallet.PaymentReposi
 	}
 }
 
-func (s service) Transfer(ctx context.Context, to, from string, amount decimal.Decimal) (*wallet.Payment, error) {
+func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (*wallet.Payment, error) {
 	// TODO -- use db txs
 	// TODO -- wrap errors?
 
 	// TODO -- error checking in the PaymentRepository level?
 	// The amount must be > 0
-	if !amount.IsPositive() {
+	if amount.Sign() != 1 {
 		return nil, wallet.ErrInvalidAmount
 	}
 
+	if to == from {
+		return nil, ErrSameAccount
+	}
+
+	// TODO -- create NOT FOUND errors here
 	// Check that the accounts exist
 	toAccount, err := s.accounts.Get(ctx, to)
 	if err != nil {
@@ -55,7 +63,15 @@ func (s service) Transfer(ctx context.Context, to, from string, amount decimal.D
 		return nil, ErrDifferentCurrency
 	}
 
-	p := wallet.NewPayment(toAccount, fromAccount, amount)
+	paymentID, err := uuid.NewV4()
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := wallet.NewPayment(paymentID, *toAccount, fromAccount, amount)
+	if err != nil {
+		return nil, err
+	}
 
 	if err := s.payments.Store(ctx, p); err != nil {
 		return nil, err

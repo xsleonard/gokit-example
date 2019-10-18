@@ -5,9 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/shopspring/decimal"
+	"github.com/cockroachdb/apd"
+	uuid "github.com/satori/go.uuid"
 
-	"github.com/xsleonard/gokit-example/util"
+	"github.com/xsleonard/gokit-example/decimal"
 )
 
 const (
@@ -47,9 +48,9 @@ var (
 
 // Account represents a user account in the wallet system
 type Account struct {
-	ID       string          `db:"id"`
-	Balance  decimal.Decimal `db:"balance"`
-	Currency string          `db:"currency"`
+	ID       uuid.UUID    `db:"id"`
+	Balance  *apd.Decimal `db:"balance"`
+	Currency string       `db:"currency"`
 }
 
 // NewAccount creates an account
@@ -58,41 +59,25 @@ func NewAccount(id, balance, currency string) (*Account, error) {
 		return nil, ErrEmptyAccountID
 	}
 
+	uid, err := uuid.FromString(id)
+	if err != nil {
+		return nil, err
+	}
+
 	if !IsValidCurrency(currency) {
 		return nil, ErrInvalidCurrency
 	}
 
-	decBal, err := util.ParseAmount(balance)
+	decBal, err := decimal.ParseCurrency(balance)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Account{
-		ID:       id,
+		ID:       uid,
 		Balance:  decBal,
 		Currency: currency,
 	}, nil
-}
-
-// TransferIn adds to the account's balance
-func (a *Account) TransferIn(amount decimal.Decimal) error {
-	if !amount.IsPositive() {
-		return ErrInvalidAmount
-	}
-	a.Balance = a.Balance.Add(amount)
-	return nil
-}
-
-// TransferOut removes from the account's balance
-func (a *Account) TransferOut(amount decimal.Decimal) error {
-	if !amount.IsPositive() {
-		return ErrInvalidAmount
-	}
-	if amount.GreaterThan(a.Balance) {
-		return ErrInsufficientBalance
-	}
-	a.Balance = a.Balance.Sub(amount)
-	return nil
 }
 
 // AccountRepository is the storage interface for accounts
@@ -103,21 +88,41 @@ type AccountRepository interface {
 }
 
 // Payment represent a transfer from one account to another.
+// A payment with a null "From" field is a credit to the "To" account.
 type Payment struct {
-	ID     string          `db:"id"`
-	To     string          `db:"to_account_id"`
-	From   string          `db:"from_account_id"`
-	Amount decimal.Decimal `db:"amount"`
+	ID     uuid.UUID     `db:"id"`
+	To     uuid.UUID     `db:"to_account_id"`
+	From   uuid.NullUUID `db:"from_account_id"`
+	Amount *apd.Decimal  `db:"amount"`
+}
+
+// FromUUIDString returns the From field's UUID string if set,
+// otherwise returns the empty string
+func (p Payment) FromUUIDString() string {
+	if p.From.Valid {
+		return p.From.UUID.String()
+	}
+	return ""
 }
 
 // NewPayment creates a Payment
-func NewPayment(to, from *Account, amount decimal.Decimal) *Payment {
-	return &Payment{
-		ID:     "foo", // TODO -- use uuid
+func NewPayment(id uuid.UUID, to Account, from *Account, amount *apd.Decimal) (*Payment, error) {
+	if amount == nil {
+		return nil, errors.New("amount must not be nil")
+	}
+
+	p := &Payment{
+		ID:     id,
 		To:     to.ID,
-		From:   from.ID,
 		Amount: amount,
 	}
+
+	if from != nil {
+		p.From.UUID = from.ID
+		p.From.Valid = true
+	}
+
+	return p, nil
 }
 
 // PaymentRepository is the storage interface for payments
@@ -130,7 +135,7 @@ type PaymentRepository interface {
 // Service defines the payment transfer service
 type Service interface {
 	// Transfer transfers an amount of money from one account to another
-	Transfer(ctx context.Context, to, from string, amount decimal.Decimal) (*Payment, error)
+	Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (*Payment, error)
 	// Payments returns all payments
 	Payments(ctx context.Context) ([]Payment, error)
 	// Accounts returns all accounts

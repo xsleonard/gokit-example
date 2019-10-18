@@ -3,24 +3,27 @@ package transfer
 import (
 	"context"
 
+	"github.com/cockroachdb/apd"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/shopspring/decimal"
 
 	wallet "github.com/xsleonard/gokit-example"
+	"github.com/xsleonard/gokit-example/decimal"
 )
 
 // Payment is a JSON-representable form of wallet.Payment
 type Payment struct {
+	ID     string `json:"id"`
 	To     string `json:"to"`
-	From   string `json:"from"`
+	From   string `json:"from,omitempty"`
 	Amount string `json:"amount"`
 }
 
 func newPayment(p wallet.Payment) Payment {
 	return Payment{
-		To:     p.To,
-		From:   p.From,
-		Amount: p.Amount.StringFixed(2),
+		ID:     p.ID.String(),
+		To:     p.To.String(),
+		From:   p.FromUUIDString(),
+		Amount: decimal.FormatCurrency(p.Amount),
 	}
 }
 
@@ -45,9 +48,9 @@ type Account struct {
 
 func newAccount(a wallet.Account) Account {
 	return Account{
-		ID:       a.ID,
+		ID:       a.ID.String(),
 		Currency: a.Currency,
-		Balance:  a.Balance.StringFixed(2),
+		Balance:  decimal.FormatCurrency(a.Balance),
 	}
 }
 
@@ -64,9 +67,9 @@ func newAccounts(accounts []wallet.Account) []Account {
 }
 
 type transferRequest struct {
-	To     string          `json:"to"`
-	From   string          `json:"from"`
-	Amount decimal.Decimal `json:"amount"`
+	To     string       `json:"to"`
+	From   string       `json:"from"`
+	Amount *apd.Decimal `json:"amount"`
 }
 
 type transferResponse struct {

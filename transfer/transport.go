@@ -11,7 +11,7 @@ import (
 	kithttp "github.com/go-kit/kit/transport/http"
 
 	wallet "github.com/xsleonard/gokit-example"
-	"github.com/xsleonard/gokit-example/util"
+	"github.com/xsleonard/gokit-example/decimal"
 )
 
 var errMethodNotAllowed = errors.New(http.StatusText(http.StatusMethodNotAllowed))
@@ -94,7 +94,7 @@ func decodeTransferRequest(_ context.Context, r *http.Request) (interface{}, err
 		return nil, errors.New("amount is required")
 	}
 
-	decimalAmount, err := util.ParseAmount(amount)
+	decimalAmount, err := decimal.ParseCurrency(amount)
 	if err != nil {
 		return nil, err
 	}
@@ -126,15 +126,16 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	switch err {
 	case errMethodNotAllowed:
 		w.WriteHeader(http.StatusMethodNotAllowed)
-	// case cargo.ErrUnknown:
-	// 	w.WriteHeader(http.StatusNotFound)
-	case util.ErrInvalidAmountPrecision,
-		util.ErrNegativeAmount,
+	case decimal.ErrInvalidPrecision,
+		decimal.ErrNegative,
+		decimal.ErrInvalid,
+		decimal.ErrNotFinite,
 		wallet.ErrEmptyAccountID,
 		wallet.ErrEmptyPaymentID,
 		wallet.ErrInvalidCurrency,
 		wallet.ErrInsufficientBalance,
-		ErrDifferentCurrency:
+		ErrDifferentCurrency,
+		ErrSameAccount:
 		w.WriteHeader(http.StatusBadRequest)
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
