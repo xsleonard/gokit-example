@@ -126,9 +126,13 @@ func makeTestPayments(logger log.Logger, accounts []wallet.Account) []wallet.Pay
 		if cond.Any() {
 			exitOnErr(logger, errors.New("default amount has a condition"))
 		}
-		p, err := wallet.NewPayment(uuids[i], a, nil, amount)
-		exitOnErr(logger, err)
-		payments[i] = *p
+
+		payments[i] = wallet.Payment{
+			ID:     uuids[i],
+			To:     a.ID,
+			From:   nil,
+			Amount: amount,
+		}
 	}
 
 	return payments

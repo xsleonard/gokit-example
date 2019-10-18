@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/go-kit/kit/log"
+	uuid "github.com/satori/go.uuid"
 
 	wallet "github.com/xsleonard/gokit-example"
 )
@@ -23,13 +24,13 @@ func NewLoggingService(logger log.Logger, s wallet.Service) wallet.Service {
 	}
 }
 
-func (s loggingService) Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (p *wallet.Payment, err error) {
+func (s loggingService) Transfer(ctx context.Context, to, from uuid.UUID, amount *apd.Decimal) (p *wallet.Payment, err error) {
 	defer func(begin time.Time) {
 		logger := s.logger
 		if err != nil {
 			logger = log.With(logger, "err", err)
 		}
-		s.logger.Log("operation", "transfer", "to", to, "from", from, "amount", amount.String(), "took", time.Since(begin))
+		s.logger.Log("operation", "transfer", "to", to, "from", from, "amount", amount, "took", time.Since(begin))
 	}(time.Now())
 
 	return s.Service.Transfer(ctx, to, from, amount)

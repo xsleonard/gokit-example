@@ -2,9 +2,11 @@ package transfer
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
-	"github.com/cockroachdb/apd"
 	"github.com/go-kit/kit/endpoint"
+	uuid "github.com/satori/go.uuid"
 
 	wallet "github.com/xsleonard/gokit-example"
 	"github.com/xsleonard/gokit-example/decimal"
@@ -23,7 +25,7 @@ func newPayment(p wallet.Payment) Payment {
 		ID:     p.ID.String(),
 		To:     p.To.String(),
 		From:   p.FromUUIDString(),
-		Amount: decimal.FormatCurrency(p.Amount),
+		Amount: p.Amount.Text('f'),
 	}
 }
 
@@ -50,7 +52,7 @@ func newAccount(a wallet.Account) Account {
 	return Account{
 		ID:       a.ID.String(),
 		Currency: a.Currency,
-		Balance:  decimal.FormatCurrency(a.Balance),
+		Balance:  a.Balance.Text('f'),
 	}
 }
 
@@ -67,9 +69,9 @@ func newAccounts(accounts []wallet.Account) []Account {
 }
 
 type transferRequest struct {
-	To     string       `json:"to"`
-	From   string       `json:"from"`
-	Amount *apd.Decimal `json:"amount"`
+	To     string `json:"to"`
+	From   string `json:"from"`
+	Amount string `json:"amount"`
 }
 
 type transferResponse struct {
@@ -81,11 +83,61 @@ func (r transferResponse) error() error {
 	return r.Err
 }
 
+var (
+	errFromRequired   = errors.New("from is required")
+	errToRequired     = errors.New("to is required")
+	errAmountRequired = errors.New("amount is required")
+)
+
+type errInvalidAccountID struct {
+	Err   error
+	Field string
+}
+
+func (e errInvalidAccountID) Error() string {
+	return fmt.Sprintf("Invalid account ID for field %q: %v", e.Field, e.Err)
+}
+
 func makeTransferEndpoint(s wallet.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req := request.(transferRequest)
 
-		p, err := s.Transfer(ctx, req.To, req.From, req.Amount)
+		// Parse and validate request fields
+		// Note: we could use the parsed types (uuid.UUID, apd.Decimal)
+		// in the request struct, but then we would lose control over the
+		// response error handling
+		if req.From == "" {
+			return nil, errFromRequired
+		}
+		if req.To == "" {
+			return nil, errToRequired
+		}
+		if req.Amount == "" {
+			return nil, errAmountRequired
+		}
+
+		from, err := uuid.FromString(req.From)
+		if err != nil {
+			return nil, errInvalidAccountID{
+				Err:   err,
+				Field: "from",
+			}
+		}
+
+		to, err := uuid.FromString(req.To)
+		if err != nil {
+			return nil, errInvalidAccountID{
+				Err:   err,
+				Field: "to",
+			}
+		}
+
+		amount, err := decimal.ParseCurrency(req.Amount)
+		if err != nil {
+			return nil, err
+		}
+
+		p, err := s.Transfer(ctx, to, from, amount)
 		if err != nil {
 			return transferResponse{
 				Err: err,

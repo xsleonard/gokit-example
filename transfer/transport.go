@@ -16,8 +16,6 @@ import (
 
 var errMethodNotAllowed = errors.New(http.StatusText(http.StatusMethodNotAllowed))
 
-// TODO -- setup cors
-
 // MakeHandler returns a handler for the tracking service.
 func MakeHandler(s wallet.Service, logger log.Logger) http.Handler {
 	r := http.NewServeMux()
@@ -72,38 +70,21 @@ func decodeEmptyRequest(allowedMethods []string) kithttp.DecodeRequestFunc {
 	}
 }
 
+type decodeError struct {
+	error
+}
+
 func decodeTransferRequest(_ context.Context, r *http.Request) (interface{}, error) {
 	if r.Method != http.MethodPost {
 		return nil, errMethodNotAllowed
 	}
 
-	// TODO -- accept json, not form values
-
-	from := r.FormValue("from")
-	if from == "" {
-		return nil, errors.New("from is required")
+	var req transferRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, decodeError{err}
 	}
 
-	to := r.FormValue("to")
-	if to == "" {
-		return nil, errors.New("to is required")
-	}
-
-	amount := r.FormValue("amount")
-	if amount == "" {
-		return nil, errors.New("amount is required")
-	}
-
-	decimalAmount, err := decimal.ParseCurrency(amount)
-	if err != nil {
-		return nil, err
-	}
-
-	return transferRequest{
-		From:   from,
-		To:     to,
-		Amount: decimalAmount,
-	}, nil
+	return req, nil
 }
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
@@ -123,24 +104,31 @@ type errorer interface {
 func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	// Note: charset=utf-8 mitigates some old browser vulnerabilities
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	switch err {
-	case errMethodNotAllowed:
-		w.WriteHeader(http.StatusMethodNotAllowed)
-	case wallet.ErrNoAccount:
-		w.WriteHeader(http.StatusNotFound)
-	case decimal.ErrInvalidPrecision,
-		decimal.ErrNegative,
-		decimal.ErrInvalid,
-		decimal.ErrNotFinite,
-		wallet.ErrEmptyAccountID,
-		wallet.ErrEmptyPaymentID,
-		wallet.ErrInvalidCurrency,
-		ErrInsufficientBalance,
-		ErrDifferentCurrency,
-		ErrSameAccount:
+	switch err.(type) {
+	case decodeError, errInvalidAccountID:
 		w.WriteHeader(http.StatusBadRequest)
 	default:
-		w.WriteHeader(http.StatusInternalServerError)
+		switch err {
+		case errMethodNotAllowed:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		case wallet.ErrNoAccount:
+			w.WriteHeader(http.StatusNotFound)
+		case decimal.ErrInvalidPrecision,
+			decimal.ErrNegative,
+			decimal.ErrInvalid,
+			decimal.ErrNotFinite,
+			decimal.ErrAmountNotMoreThanZero,
+			decimal.ErrAmountNil,
+			errInsufficientBalance,
+			errDifferentCurrency,
+			errSameAccount,
+			errToRequired,
+			errFromRequired,
+			errAmountRequired:
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+		}
 	}
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": err.Error(),

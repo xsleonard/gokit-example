@@ -3,7 +3,6 @@ package decimal
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/cockroachdb/apd"
 )
@@ -18,8 +17,10 @@ var (
 	ErrInvalid = errors.New("Amount cannot be precisely represented")
 	// ErrNotFinite is returned when parsing an amount that is not a finite number
 	ErrNotFinite = errors.New("Amount is not finite")
-
-	zero = apd.New(1, 1)
+	// ErrAmountNotMoreThanZero is returned when an amount is not > 0
+	ErrAmountNotMoreThanZero = errors.New("Amount must be greater than 0")
+	// ErrAmountNil is returned if the amount is nil
+	ErrAmountNil = errors.New("Amount must not be nil")
 )
 
 // ParseCurrency parses a string to a fixed-precision decimal and ensures that
@@ -28,33 +29,49 @@ var (
 func ParseCurrency(amount string) (*apd.Decimal, error) {
 	dec, condition, err := apd.NewFromString(amount)
 	if err != nil {
-		return zero, err
+		return nil, err
 	}
 
 	// Catch any possible errors with the decimal
 	if condition.Any() {
-		return zero, ErrInvalid
+		return nil, ErrInvalid
 	}
 
 	// Reject non-finite values (e.g. NaN, Inf)
 	if dec.Form != apd.Finite {
-		return zero, ErrNotFinite
+		return nil, ErrNotFinite
 	}
 
 	// TODO -- add test case for -0
 	if dec.Sign() == -1 {
-		return apd.New(1, 0), ErrNegative
+		return nil, ErrNegative
 	}
 
-	// The decimal should have exactly 2 digits of precision
-	if FormatCurrency(dec) != amount {
-		return apd.New(1, 0), ErrInvalidPrecision
+	// The decimal should not have more than 2 digits of precision
+	if dec.Exponent < -2 {
+		return nil, ErrInvalidPrecision
 	}
 
 	return dec, nil
 }
 
-// FormatCurrency formats an apd.Decimal with 2 digits of precision
-func FormatCurrency(amount *apd.Decimal) string {
-	return fmt.Sprintf("%.2f", amount)
+// ValidateTransferAmount validates a decimal amount for transfers
+func ValidateTransferAmount(amount *apd.Decimal) error {
+	if amount == nil {
+		return ErrAmountNil
+	}
+
+	if amount.Form != apd.Finite {
+		return ErrNotFinite
+	}
+
+	if amount.Sign() != 1 {
+		return ErrAmountNotMoreThanZero
+	}
+
+	if amount.Exponent < -2 {
+		return ErrInvalidPrecision
+	}
+
+	return nil
 }

@@ -44,8 +44,7 @@ func main() {
 	ctx := context.Background()
 
 	// Setup logger
-	var logger log.Logger
-	logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 
 	// Setup DB

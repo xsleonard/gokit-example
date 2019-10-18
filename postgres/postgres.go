@@ -4,7 +4,9 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 
+	"github.com/cockroachdb/apd"
 	"github.com/go-kit/kit/log"
 	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
@@ -12,7 +14,16 @@ import (
 	wallet "github.com/xsleonard/gokit-example"
 )
 
-var nullUUID uuid.UUID
+var (
+	// errEmptyAccountID is returned when creating an account without an ID
+	errEmptyAccountID = errors.New("Account ID must not be empty")
+	// errEmptyPaymentID is returned when creating an account without an ID
+	errEmptyPaymentID = errors.New("Payment ID must not be empty")
+	// errInvalidCurrency is returned for unrecognized currency codes
+	errInvalidCurrency = errors.New("Invalid currency code")
+
+	nullUUID uuid.UUID
+)
 
 type accountRepository struct {
 	db     *sqlx.DB
@@ -29,23 +40,45 @@ func NewAccountRepository(db *sqlx.DB, logger log.Logger) wallet.AccountReposito
 
 func (r *accountRepository) Store(ctx context.Context, account *wallet.Account) error {
 	if uuid.Equal(account.ID, nullUUID) {
-		return wallet.ErrEmptyAccountID
+		return errEmptyAccountID
 	}
 	if !wallet.IsValidCurrency(account.Currency) {
-		return wallet.ErrInvalidCurrency
+		return errInvalidCurrency
 	}
 
-	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+	return withTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		q := `insert into account (id, currency) values ($1, $2)`
 		_, err := tx.ExecContext(ctx, q, account.ID, account.Currency)
 		return err
 	})
 }
 
-func (r *accountRepository) Get(ctx context.Context, id string) (*wallet.Account, error) {
-	row := r.db.QueryRowxContext(ctx, `select id, balance, currency from account_balance where id=$1`, id)
+type account struct {
+	ID       uuid.UUID    `db:"id"`
+	Balance  *apd.Decimal `db:"balance"`
+	Currency string       `db:"currency"`
+}
 
-	var a wallet.Account
+func newWalletAccount(a account) wallet.Account {
+	return wallet.Account{
+		ID:       a.ID,
+		Balance:  a.Balance,
+		Currency: a.Currency,
+	}
+}
+
+func newWalletAccounts(accounts []account) []wallet.Account {
+	aa := make([]wallet.Account, len(accounts))
+	for i, a := range accounts {
+		aa[i] = newWalletAccount(a)
+	}
+	return aa
+}
+
+func (r *accountRepository) GetTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*wallet.Account, error) {
+	row := tx.QueryRowxContext(ctx, `select id, balance, currency from account_balance where id=$1`, id)
+
+	var a account
 	if err := row.StructScan(&a); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, wallet.ErrNoAccount
@@ -53,7 +86,8 @@ func (r *accountRepository) Get(ctx context.Context, id string) (*wallet.Account
 		return nil, err
 	}
 
-	return &a, nil
+	wa := newWalletAccount(a)
+	return &wa, nil
 }
 
 func (r *accountRepository) All(ctx context.Context) ([]wallet.Account, error) {
@@ -65,11 +99,11 @@ func (r *accountRepository) All(ctx context.Context) ([]wallet.Account, error) {
 	var accounts []wallet.Account
 	defer rows.Close()
 	for rows.Next() {
-		var a wallet.Account
+		var a account
 		if err := rows.StructScan(&a); err != nil {
 			return nil, err
 		}
-		accounts = append(accounts, a)
+		accounts = append(accounts, newWalletAccount(a))
 	}
 
 	return accounts, nil
@@ -88,18 +122,47 @@ func NewPaymentRepository(db *sqlx.DB, logger log.Logger) wallet.PaymentReposito
 	}
 }
 
+func (r *paymentRepository) WithTx(ctx context.Context, f func(ctx context.Context, tx *sqlx.Tx) error) error {
+	return withTx(ctx, r.logger, r.db, f)
+}
+
 func (r *paymentRepository) Store(ctx context.Context, p *wallet.Payment) error {
+	return withTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		return r.StoreTx(ctx, tx, p)
+	})
+}
+
+func (r *paymentRepository) StoreTx(ctx context.Context, tx *sqlx.Tx, p *wallet.Payment) error {
 	if p.ID == uuid.Nil {
-		return wallet.ErrEmptyPaymentID
+		return errEmptyPaymentID
 	}
 
-	r.logger.Log("id", p.ID, "from", p.From.UUID, "to", p.To, "amount", p.Amount)
+	q := `insert into payment (id, from_account_id, to_account_id, amount) values ($1, $2, $3, $4)`
+	_, err := tx.ExecContext(ctx, q, p.ID, p.From, p.To, p.Amount)
+	return err
+}
 
-	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		q := `insert into payment (id, from_account_id, to_account_id, amount) values ($1, $2, $3, $4)`
-		_, err := tx.ExecContext(ctx, q, p.ID, p.From, p.To, p.Amount)
-		return err
-	})
+type payment struct {
+	ID     uuid.UUID     `db:"id"`
+	To     uuid.UUID     `db:"to_account_id"`
+	From   uuid.NullUUID `db:"from_account_id"`
+	Amount *apd.Decimal  `db:"amount"`
+}
+
+func newWalletPayment(p payment) wallet.Payment {
+	if p.Amount == nil {
+		panic("amount is unexpectedly nil")
+	}
+	pp := wallet.Payment{
+		ID:     p.ID,
+		To:     p.To,
+		Amount: p.Amount,
+	}
+	if p.From.Valid {
+		fromID := p.From.UUID
+		pp.From = &fromID
+	}
+	return pp
 }
 
 func (r *paymentRepository) All(ctx context.Context) ([]wallet.Payment, error) {
@@ -111,17 +174,17 @@ func (r *paymentRepository) All(ctx context.Context) ([]wallet.Payment, error) {
 	var payments []wallet.Payment
 	defer rows.Close()
 	for rows.Next() {
-		var p wallet.Payment
+		var p payment
 		if err := rows.StructScan(&p); err != nil {
 			return nil, err
 		}
-		payments = append(payments, p)
+		payments = append(payments, newWalletPayment(p))
 	}
 
 	return payments, nil
 }
 
-func insideTx(ctx context.Context, logger log.Logger, db *sqlx.DB, f func(ctx context.Context, tx *sqlx.Tx) error) (err error) {
+func withTx(ctx context.Context, logger log.Logger, db *sqlx.DB, f func(ctx context.Context, tx *sqlx.Tx) error) (err error) {
 	tx, err := db.BeginTxx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelDefault,
 		ReadOnly:  false,

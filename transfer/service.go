@@ -6,20 +6,22 @@ import (
 	"errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
 
 	wallet "github.com/xsleonard/gokit-example"
+	"github.com/xsleonard/gokit-example/decimal"
 )
 
 var (
-	// ErrDifferentCurrency is returned if a transfer is requested between accounts
-	// that have different currencies
-	ErrDifferentCurrency = errors.New("Transfers must use the same currency")
-	// ErrSameAccount is returned if a transfer's sender and receiver are the same account
-	ErrSameAccount = errors.New("Transfers must be between different accounts")
-	// ErrInsufficientBalance is returned if an account's balance is less than
+	// errSameAccount is returned if a transfer's sender and receiver are the same account
+	errSameAccount = errors.New("Transfers must be between different accounts")
+	// errInsufficientBalance is returned if an account's balance is less than
 	// an amount requested to be transferred
-	ErrInsufficientBalance = errors.New("Account has an insufficient balance")
+	errInsufficientBalance = errors.New("Account has an insufficient balance")
+	// errDifferentCurrency is returned if a transfer is requested between accounts
+	// that have different currencies
+	errDifferentCurrency = errors.New("Transfers must use the same currency")
 )
 
 type service struct {
@@ -35,37 +37,13 @@ func NewService(accounts wallet.AccountRepository, payments wallet.PaymentReposi
 	}
 }
 
-func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (*wallet.Payment, error) {
-	// TODO -- use db txs
-
-	// The amount must be > 0
-	if amount.Sign() != 1 {
-		return nil, wallet.ErrInvalidAmount
-	}
-
-	if to == from {
-		return nil, ErrSameAccount
-	}
-
-	// Fetch the accounts, checking that they exist
-	toAccount, err := s.accounts.Get(ctx, to)
-	if err != nil {
+func (s service) Transfer(ctx context.Context, to, from uuid.UUID, amount *apd.Decimal) (*wallet.Payment, error) {
+	if err := decimal.ValidateTransferAmount(amount); err != nil {
 		return nil, err
 	}
 
-	fromAccount, err := s.accounts.Get(ctx, from)
-	if err != nil {
-		return nil, err
-	}
-
-	// Transfers between accounts of different currencies is not allowed
-	if toAccount.Currency != fromAccount.Currency {
-		return nil, ErrDifferentCurrency
-	}
-
-	// The account must have sufficient balance
-	if fromAccount.Balance.Cmp(amount) < 0 {
-		return nil, ErrInsufficientBalance
+	if uuid.Equal(to, from) {
+		return nil, errSameAccount
 	}
 
 	paymentID, err := uuid.NewV4()
@@ -73,16 +51,45 @@ func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Deci
 		return nil, err
 	}
 
-	p, err := wallet.NewPayment(paymentID, *toAccount, fromAccount, amount)
-	if err != nil {
-		return nil, err
+	p := &wallet.Payment{
+		ID:     paymentID,
+		To:     to,
+		From:   &from,
+		Amount: amount,
 	}
 
-	if err := s.payments.Store(ctx, p); err != nil {
+	if err := s.payments.WithTx(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		return s.transferTx(ctx, tx, p)
+	}); err != nil {
 		return nil, err
 	}
 
 	return p, nil
+}
+
+func (s service) transferTx(ctx context.Context, tx *sqlx.Tx, p *wallet.Payment) error {
+	// Fetch the accounts, checking that they exist
+	toAccount, err := s.accounts.GetTx(ctx, tx, p.To)
+	if err != nil {
+		return err
+	}
+
+	fromAccount, err := s.accounts.GetTx(ctx, tx, *p.From)
+	if err != nil {
+		return err
+	}
+
+	// Transfers between accounts of different currencies is not allowed
+	if toAccount.Currency != fromAccount.Currency {
+		return errDifferentCurrency
+	}
+
+	// The account must have sufficient balance
+	if fromAccount.Balance.Cmp(p.Amount) < 0 {
+		return errInsufficientBalance
+	}
+
+	return s.payments.StoreTx(ctx, tx, p)
 }
 
 func (s service) Payments(ctx context.Context) ([]wallet.Payment, error) {

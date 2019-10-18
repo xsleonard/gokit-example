@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: run build test lint check cover install-linters format cover help
+.PHONY: run build test lint check cover install-linters format cover generate-mocks help
 
 PACKAGES = $(shell find ./src -type d -not -path '\./src')
 
@@ -59,6 +59,10 @@ format: ## Formats the code. Must have goimports installed (use make install-lin
 	goimports -w -local github.com/xsleonard/gokit-example ./...
 	# This performs code simplifications
 	gofmt -s -w ./...
+
+generate-mocks: ## Generates mocks with mockery. See the README for install instructions.
+	mockery -name=AccountRepository -case=underscore
+	mockery -name=PaymentRepository -case=underscore
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'

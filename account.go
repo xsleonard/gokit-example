@@ -6,9 +6,8 @@ import (
 	"errors"
 
 	"github.com/cockroachdb/apd"
+	"github.com/jmoiron/sqlx"
 	uuid "github.com/satori/go.uuid"
-
-	"github.com/xsleonard/gokit-example/decimal"
 )
 
 var (
@@ -36,108 +35,50 @@ func IsValidCurrency(currency string) bool {
 	return false
 }
 
-var (
-	// ErrEmptyAccountID is returned when creating an account without an ID
-	ErrEmptyAccountID = errors.New("Account ID must not be empty")
-	// ErrEmptyPaymentID is returned when creating an account without an ID
-	ErrEmptyPaymentID = errors.New("Payment ID must not be empty")
-	// ErrInvalidCurrency is returned for unrecognized currency codes
-	ErrInvalidCurrency = errors.New("Invalid currency code")
-	// ErrInvalidAmount is returned if the amount requested to transfer
-	// is not greater than 0
-	ErrInvalidAmount = errors.New("Transfer amount must be positive")
-)
-
 // Account represents a user account in the wallet system
 type Account struct {
-	ID       uuid.UUID    `db:"id"`
-	Balance  *apd.Decimal `db:"balance"`
-	Currency string       `db:"currency"`
-}
-
-// NewAccount creates an account
-func NewAccount(id, balance, currency string) (*Account, error) {
-	if id == "" {
-		return nil, ErrEmptyAccountID
-	}
-
-	uid, err := uuid.FromString(id)
-	if err != nil {
-		return nil, err
-	}
-
-	if !IsValidCurrency(currency) {
-		return nil, ErrInvalidCurrency
-	}
-
-	decBal, err := decimal.ParseCurrency(balance)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Account{
-		ID:       uid,
-		Balance:  decBal,
-		Currency: currency,
-	}, nil
+	ID       uuid.UUID
+	Balance  *apd.Decimal
+	Currency string
 }
 
 // AccountRepository is the storage interface for accounts
 type AccountRepository interface {
 	Store(ctx context.Context, account *Account) error
-	Get(ctx context.Context, id string) (*Account, error)
+	GetTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID) (*Account, error)
 	All(ctx context.Context) ([]Account, error)
 }
 
 // Payment represent a transfer from one account to another.
 // A payment with a null "From" field is a credit to the "To" account.
 type Payment struct {
-	ID     uuid.UUID     `db:"id"`
-	To     uuid.UUID     `db:"to_account_id"`
-	From   uuid.NullUUID `db:"from_account_id"`
-	Amount *apd.Decimal  `db:"amount"`
+	ID     uuid.UUID
+	To     uuid.UUID
+	From   *uuid.UUID
+	Amount *apd.Decimal
 }
 
 // FromUUIDString returns the From field's UUID string if set,
 // otherwise returns the empty string
 func (p Payment) FromUUIDString() string {
-	if p.From.Valid {
-		return p.From.UUID.String()
+	if p.From == nil {
+		return ""
 	}
-	return ""
-}
-
-// NewPayment creates a Payment
-func NewPayment(id uuid.UUID, to Account, from *Account, amount *apd.Decimal) (*Payment, error) {
-	if amount == nil {
-		return nil, errors.New("amount must not be nil")
-	}
-
-	p := &Payment{
-		ID:     id,
-		To:     to.ID,
-		Amount: amount,
-	}
-
-	if from != nil {
-		p.From.UUID = from.ID
-		p.From.Valid = true
-	}
-
-	return p, nil
+	return p.From.String()
 }
 
 // PaymentRepository is the storage interface for payments
 type PaymentRepository interface {
+	WithTx(ctx context.Context, f func(ctx context.Context, tx *sqlx.Tx) error) error
+	StoreTx(ctx context.Context, tx *sqlx.Tx, payment *Payment) error
 	Store(ctx context.Context, payment *Payment) error
 	All(ctx context.Context) ([]Payment, error)
 }
 
-// TODO -- move back to Transfer?
 // Service defines the payment transfer service
 type Service interface {
 	// Transfer transfers an amount of money from one account to another
-	Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (*Payment, error)
+	Transfer(ctx context.Context, to, from uuid.UUID, amount *apd.Decimal) (*Payment, error)
 	// Payments returns all payments
 	Payments(ctx context.Context) ([]Payment, error)
 	// Accounts returns all accounts
