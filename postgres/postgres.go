@@ -91,7 +91,7 @@ func (r *accountRepository) GetTx(ctx context.Context, tx *sqlx.Tx, id uuid.UUID
 }
 
 func (r *accountRepository) All(ctx context.Context) ([]wallet.Account, error) {
-	rows, err := r.db.QueryxContext(ctx, `select id, balance, currency from account_balance`)
+	rows, err := r.db.QueryxContext(ctx, `select id, balance, currency from account_balance order by id`)
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +166,7 @@ func newWalletPayment(p payment) wallet.Payment {
 }
 
 func (r *paymentRepository) All(ctx context.Context) ([]wallet.Payment, error) {
-	rows, err := r.db.QueryxContext(ctx, `select id, from_account_id, to_account_id, amount from payment`)
+	rows, err := r.db.QueryxContext(ctx, `select id, from_account_id, to_account_id, amount from payment order by id`)
 	if err != nil {
 		return nil, err
 	}
