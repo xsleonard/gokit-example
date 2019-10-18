@@ -1,5 +1,7 @@
 # gokit-example
 
+[![Documentation](https://godoc.org/github.com/xsleonard/gokit-example?status.svg)](http://godoc.org/github.com/xsleonard/gokit-example)
+
 This is a demo service for accounts with balances and transfers between those accounts.
 
 An account has an ID, balance and currency type. 
