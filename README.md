@@ -72,7 +72,7 @@ See the [API Docs](./API.md)
 ### Add test data for manual experimentation
 
 ```sh
-go run ./cmd/testdata
+go run ./cmd/addtestdata
 ```
 
 This adds 6 accounts and credits each account with 100 units of their currency.
@@ -96,6 +96,8 @@ Usage of wallet:
 
 ### Run the server
 
+Make sure the database has been initialized, see [setup database](#setup-database).
+
 ```sh
 go run ./cmd/wallet
 ```
@@ -116,7 +118,7 @@ curl -X POST 'http://localhost:8888/v1/transfer' -d '{"to":"...","from":"...","a
 
 ### List payments
 
-See all payments. It will include the original credits to the accounts created by the `testdata` tool, and the new transfer payments.
+See all payments. It will include the original credits to the accounts created by the `addtestdata` tool, and the new transfer payments.
 
 ```
 curl 'http://localhost:8888/v1/payments'

@@ -58,8 +58,8 @@ func main() {
 
 func makeUUIDs(logger log.Logger, uuidStrings []string) []uuid.UUID {
 	uuids := make([]uuid.UUID, len(uuidStrings))
-	for i := range uuidStrings {
-		id, err := uuid.FromString(uuidStrings)
+	for i, u := range uuidStrings {
+		id, err := uuid.FromString(u)
 		exitOnErr(logger, err)
 		uuids[i] = id
 	}

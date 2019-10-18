@@ -19,6 +19,7 @@ update-db: ## Updates the database to the latest schema. To change the database 
 
 test: ## Run tests
 	go test ./... -timeout=1m -cover ${PARALLEL}
+	go test ./cmd/... -timeout=1m
 
 test-race: ## Run tests with -race
 	go test ./... -timeout=1m -race ${PARALLEL}
