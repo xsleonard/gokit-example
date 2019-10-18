@@ -22,8 +22,6 @@ const (
 )
 
 func main() {
-	// TODO -- use viper to parse flags?
-	// TODO -- use env vars as fallback
 	var databaseURL string
 	flag.StringVar(&databaseURL, "db", defaultDatabaseURL, "Postgres DB URL")
 	flag.Parse()

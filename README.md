@@ -8,7 +8,8 @@ This is a demo service for accounts with balances and transfers between those ac
 - [Running](#running)
 - [API Docs](#api-docs)
 - [Usage](#usage)
-- [Development](#development)
+- [Install linters if you don't have them](#install-linters-if-you-dont-have-them)
+- [Run the linters \(uses golangci-lint\)](#run-the-linters-uses-golangci-lint)
 
 <!-- /MarkdownTOC -->
 
@@ -25,6 +26,12 @@ docker-compose up -d
 
 Otherwise, install and run postgres as you wish.
 The default database name is `wallet`.
+
+### Install golang-migrate
+
+[migrate](https://github.com/golang-migrate/migrate) is used to manage DB migrations and setup the initial tables.
+
+Follow the installation instructions from https://github.com/golang-migrate/migrate/tree/master/cmd/migrate to install.
 
 ### Setup database
 
@@ -44,18 +51,12 @@ Run the migration tool to initialize the [database schema](./migrations/1_init.u
 make update-db
 ```
 
-### Install golang-migrate
-
-[migrate](https://github.com/golang-migrate/migrate) is used to manage DB migrations and setup the initial tables.
-
-Follow the installation instructions from https://github.com/golang-migrate/migrate/tree/master/cmd/migrate to install.
-
 ## Running
 
 By default, the application runs on `localhost:8888` and connects to the local postgres database run by docker-compose, with url `postgresql://postgres@localhost:54320/wallet?sslmode=disable`.
 
 ```sh
-go run cmd/wallet/
+go run ./cmd/wallet/
 ```
 
 ## API Docs
@@ -67,18 +68,22 @@ See the [API Docs](./API.md)
 ### Add test data for manual experimentation
 
 ```sh
-go run cmd/testdata
+go run ./cmd/testdata
 ```
 
 This adds 6 accounts and credits each account with 100 units of their currency.
 
 ### Run the server
 
-TODO -- docker-compose?
+```sh
+go run ./cmd/wallet
+```
+
+### Server configuration
 
 ```sh
-go run cmd/wallet
-```
+go run ./cmd/wallet -h
+
 
 ### List accounts
 

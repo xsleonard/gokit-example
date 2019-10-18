@@ -19,7 +19,6 @@ func TestParseCurrency(t *testing.T) {
 			err: errors.New(`parse exponent: n: strconv.ParseInt: parsing "n": invalid syntax`),
 		},
 		{
-			// No negative numbers
 			a:   "-1",
 			err: ErrNegative,
 		},

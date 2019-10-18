@@ -42,7 +42,6 @@ func ParseCurrency(amount string) (*apd.Decimal, error) {
 		return nil, ErrNotFinite
 	}
 
-	// TODO -- add test case for -0
 	if dec.Sign() == -1 {
 		return nil, ErrNegative
 	}

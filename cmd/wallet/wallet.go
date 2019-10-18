@@ -33,8 +33,6 @@ const (
 )
 
 func main() {
-	// TODO -- use viper to parse flags?
-	// TODO -- use env vars as fallback
 	var httpAddr string
 	var databaseURL string
 	flag.StringVar(&httpAddr, "addr", "localhost:8888", "HTTP listen address")
@@ -87,8 +85,6 @@ func main() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT)
 		<-c
-
-		// TODO -- handle a 2nd ctrl+c to dump stack and panic
 
 		ctx, cancel := context.WithTimeout(ctx, serverShutdownTimeout)
 		defer cancel()
