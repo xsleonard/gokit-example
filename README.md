@@ -120,17 +120,11 @@ make test
 
 ### Linting
 
+Linting is done by [golangci-lint](https://github.com/golangci/golangci-lint).
+
 ```sh
 # Install linters if you don't have them
 make install-linters
-# Run the linters (uses gometalinter)
+# Run the linters (uses golangci-lint)
 make lint
-```
-
-### Generate mocks
-
-First, [install mockery](#install-mockery)
-
-```sh
-make generate-mocks
 ```
