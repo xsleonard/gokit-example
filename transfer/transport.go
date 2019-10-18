@@ -126,6 +126,8 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 	switch err {
 	case errMethodNotAllowed:
 		w.WriteHeader(http.StatusMethodNotAllowed)
+	case wallet.ErrNoAccount:
+		w.WriteHeader(http.StatusNotFound)
 	case decimal.ErrInvalidPrecision,
 		decimal.ErrNegative,
 		decimal.ErrInvalid,
@@ -133,7 +135,7 @@ func encodeError(_ context.Context, err error, w http.ResponseWriter) {
 		wallet.ErrEmptyAccountID,
 		wallet.ErrEmptyPaymentID,
 		wallet.ErrInvalidCurrency,
-		wallet.ErrInsufficientBalance,
+		ErrInsufficientBalance,
 		ErrDifferentCurrency,
 		ErrSameAccount:
 		w.WriteHeader(http.StatusBadRequest)

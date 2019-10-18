@@ -17,6 +17,9 @@ var (
 	ErrDifferentCurrency = errors.New("Transfers must use the same currency")
 	// ErrSameAccount is returned if a transfer's sender and receiver are the same account
 	ErrSameAccount = errors.New("Transfers must be between different accounts")
+	// ErrInsufficientBalance is returned if an account's balance is less than
+	// an amount requested to be transferred
+	ErrInsufficientBalance = errors.New("Account has an insufficient balance")
 )
 
 type service struct {
@@ -34,9 +37,7 @@ func NewService(accounts wallet.AccountRepository, payments wallet.PaymentReposi
 
 func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Decimal) (*wallet.Payment, error) {
 	// TODO -- use db txs
-	// TODO -- wrap errors?
 
-	// TODO -- error checking in the PaymentRepository level?
 	// The amount must be > 0
 	if amount.Sign() != 1 {
 		return nil, wallet.ErrInvalidAmount
@@ -46,8 +47,7 @@ func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Deci
 		return nil, ErrSameAccount
 	}
 
-	// TODO -- create NOT FOUND errors here
-	// Check that the accounts exist
+	// Fetch the accounts, checking that they exist
 	toAccount, err := s.accounts.Get(ctx, to)
 	if err != nil {
 		return nil, err
@@ -63,6 +63,11 @@ func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Deci
 		return nil, ErrDifferentCurrency
 	}
 
+	// The account must have sufficient balance
+	if fromAccount.Balance.Cmp(amount) < 0 {
+		return nil, ErrInsufficientBalance
+	}
+
 	paymentID, err := uuid.NewV4()
 	if err != nil {
 		return nil, err
@@ -74,14 +79,6 @@ func (s service) Transfer(ctx context.Context, to, from string, amount *apd.Deci
 	}
 
 	if err := s.payments.Store(ctx, p); err != nil {
-		return nil, err
-	}
-
-	if err := s.accounts.Store(ctx, fromAccount); err != nil {
-		return nil, err
-	}
-
-	if err := s.accounts.Store(ctx, toAccount); err != nil {
 		return nil, err
 	}
 

@@ -43,10 +43,13 @@ func (r *accountRepository) Store(ctx context.Context, account *wallet.Account) 
 }
 
 func (r *accountRepository) Get(ctx context.Context, id string) (*wallet.Account, error) {
-	row := r.db.QueryRowxContext(ctx, `select balance, currency from account_balance where id=$1`, id)
+	row := r.db.QueryRowxContext(ctx, `select id, balance, currency from account_balance where id=$1`, id)
 
 	var a wallet.Account
 	if err := row.StructScan(&a); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, wallet.ErrNoAccount
+		}
 		return nil, err
 	}
 
@@ -85,14 +88,16 @@ func NewPaymentRepository(db *sqlx.DB, logger log.Logger) wallet.PaymentReposito
 	}
 }
 
-func (r *paymentRepository) Store(ctx context.Context, payment *wallet.Payment) error {
-	if payment.ID == uuid.Nil {
+func (r *paymentRepository) Store(ctx context.Context, p *wallet.Payment) error {
+	if p.ID == uuid.Nil {
 		return wallet.ErrEmptyPaymentID
 	}
 
+	r.logger.Log("id", p.ID, "from", p.From.UUID, "to", p.To, "amount", p.Amount)
+
 	return insideTx(ctx, r.logger, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		q := `insert into payment (id, from_account_id, to_account_id, amount) values ($1, $2, $3, $4)`
-		_, err := tx.ExecContext(ctx, q, payment.ID, payment.From.UUID, payment.To, payment.Amount)
+		_, err := tx.ExecContext(ctx, q, p.ID, p.From, p.To, p.Amount)
 		return err
 	})
 }

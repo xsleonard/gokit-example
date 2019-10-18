@@ -11,6 +11,11 @@ import (
 	"github.com/xsleonard/gokit-example/decimal"
 )
 
+var (
+	// ErrNoAccount is returned when an account is not found in storage by ID
+	ErrNoAccount = errors.New("Account does not exist")
+)
+
 const (
 	// USD United States Dollar
 	USD string = "USD"
@@ -38,9 +43,6 @@ var (
 	ErrEmptyPaymentID = errors.New("Payment ID must not be empty")
 	// ErrInvalidCurrency is returned for unrecognized currency codes
 	ErrInvalidCurrency = errors.New("Invalid currency code")
-	// ErrInsufficientBalance is returned if an account's balance is less than
-	// an amount requested to be transferred
-	ErrInsufficientBalance = errors.New("Account has an insufficient balance")
 	// ErrInvalidAmount is returned if the amount requested to transfer
 	// is not greater than 0
 	ErrInvalidAmount = errors.New("Transfer amount must be positive")
